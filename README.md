@@ -1,7 +1,8 @@
-# hdl_flow
+```
+hdl_flow
 A collection of perl scripts to compile VHDL sources
 
-# library structure in case of using modelsim a simulation toolchain
+library structure in case of using modelsim a simulation toolchain
 hdl_flow
  |--dest_projects
  |   |--library1
@@ -29,3 +30,4 @@ hdl_flow
  |  |--blacklist
  |--makefile
  |--modelsim.ini
+``` 
