@@ -15,7 +15,7 @@ place the modelsim.ini of you choise into the flow directors
 use the following command to get help
  compile --help
 
-use the following command to build dependencies and compile the source using modelsim
+use the following commands to build dependencies and compile the sources using modelsim
  compile -e -c --tc=modelsim
  compile -make
 
