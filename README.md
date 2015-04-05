@@ -3,24 +3,24 @@ hdl_flow
 A collection of perl scripts to compile VHDL sources
 
 you need to set the following variables:
-export GIT_PROJECTS=/path_to/git_projects
-export DEST_PROJECTS=/path_to/dest_projects
-export MODEL_TECH=$GIT_PROJECTS
-export MODELSIM=$GIT_PROJECTS/modelsim.ini
-export PATH=$PATH:$GIT_PROJECTS/flow
+ export GIT_PROJECTS=/path_to/git_projects
+ export DEST_PROJECTS=/path_to/dest_projects
+ export MODEL_TECH=$GIT_PROJECTS
+ export MODELSIM=$GIT_PROJECTS/modelsim.ini
+ export PATH=$PATH:$GIT_PROJECTS/flow
 
 place the modelsim.ini of you choise into the flow directors
-cp /path_to_your_modelsim/modelsim.ini $GIT_PROJECTS/flow/dflt_modelsim.ini
+ cp /path_to_your_modelsim/modelsim.ini $GIT_PROJECTS/flow/dflt_modelsim.ini
 
 use the following command to get help
-compile --help
+ compile --help
 
 use the following command to build dependencies and compile the source using modelsim
-compile -e -c --tc=modelsim
-compile -make
+ compile -e -c --tc=modelsim
+ compile -make
 
 you can do it in one command also
-compile -e --tc=modelsim
+ compile -e --tc=modelsim
 
 library structure in case of using modelsim as simulation toolchain
 hdl_flow
