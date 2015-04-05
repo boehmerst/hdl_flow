@@ -1,0 +1,5 @@
+# add libraries to be ignored
+# use '#' for comments
+#
+.git
+
