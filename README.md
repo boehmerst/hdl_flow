@@ -9,7 +9,7 @@ you need to set the following variables:
  export MODELSIM=$GIT_PROJECTS/modelsim.ini
  export PATH=$PATH:$GIT_PROJECTS/flow
 
-place the modelsim.ini of you choise into the flow directors
+place a modelsim.ini of you choise into the flow directories
  cp /path_to_your_modelsim/modelsim.ini $GIT_PROJECTS/flow/dflt_modelsim.ini
 
 use the following command to get help
