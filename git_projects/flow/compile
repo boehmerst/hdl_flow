@@ -105,6 +105,7 @@ sub chk_toolchain
                     'ncsim'    => '1',
                     'modelsim' => '1',
                     'isim'     => '1',
+                    'nvc'      => '1', 
                   );
 
   if( ($supported{$toolchain} == 0) or !defined($supported{$toolchain}) )
@@ -260,6 +261,36 @@ sub genGhdlFiles
       {
         # add library to the ghdl.ini
         print $ghdl "-P\${DEST_PROJECTS}/$lib/ghdl\n";  
+      }
+    }
+  }
+
+  close($ghdl);
+}
+
+# generate nvc.ini
+sub genNvcFiles
+{
+  my $libraries = $_[0];
+
+  my $dflt_ghdl_ini = new FileHandle;
+  open($dflt_ghdl_ini, "$ROOT/flow/dflt_nvc.ini");
+  my $lines = [<$dflt_ghdl_ini>];
+  close(dflt_ghdl_ini);
+
+  my $ghdl      = new FileHandle;
+  open($ghdl, ">$ROOT/nvc.ini") or die "could not create nvc.ini";
+
+  foreach my $line (@{$lines})
+  {
+    chomp($line);
+    print $ghdl "$line\n";
+    if($line =~ /\[compile_flags\]/i or $line =~ /\[elaborate_flags\]/i)
+    {
+      foreach my $lib (@$libraries)
+      {
+        # add library to the ghdl.ini
+        print $ghdl "--map=$lib\:\${DEST_PROJECTS}/$lib/nvc\n";
       }
     }
   }
@@ -423,7 +454,7 @@ sub _preprocess_
   vprint("execute preprocessing step for $toolchain\n");
 
   # extract all libraries based on directory names or command line option
-  if(defined(@{$option{'lib'}{'ref'}}))
+  if(@{$option{'lib'}{'ref'}})
   {
     @$libraries = split(/,/, join(',', @{$option{'lib'}{'ref'}}));
   }
@@ -437,6 +468,9 @@ sub _preprocess_
 
   # handle ghdl specific stuff
   genGhdlFiles($libraries) if $toolchain eq "ghdl";
+
+  # handle nvc specific stuff
+  genNvcFiles($libraries) if $toolchain eq "nvc";
 
   # handle ncsim specific stuff
   genNcsimFiles($libraries) if $toolchain eq "ncsim";
@@ -457,6 +491,7 @@ sub distclean
   unlink("$ROOT/modelsim.ini");
   unlink("$ROOT/makefile");
   unlink("$ROOT/ghdl.ini");
+  unlink("$ROOT/nvc.ini");
   unlink("$ROOT/hdl.var");
   unlink("$ROOT/cds.lib");
   unlink("$ROOT/isim.ini");

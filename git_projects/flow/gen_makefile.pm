@@ -43,6 +43,7 @@ sub gen_makefile
   gen_ncsim_makefile($lib, $module)    if $GLOBAL::toolchain eq "ncsim";
   gen_modelsim_makefile($lib, $module) if $GLOBAL::toolchain eq "modelsim";
   gen_isim_makefile($lib, $module)     if $GLOBAL::toolchain eq "isim";
+  gen_nvc_makefile($lib, $module)      if $GLOBAL::toolchain eq "nvc";
 }
 
 # generate database
@@ -1059,6 +1060,159 @@ sub gen_isim_makefile
 
       my ($base, $path, $suffix) = fileparse($dep_file, ".vhd");
       my $prefix = "\${DEST_PROJECTS}/$dep_lib/isim/";
+      my $dep    = $prefix . $base . ".o";
+
+      print $fh " $dep";
+    }
+
+    print $fh "\n\n";
+  }
+
+  close($fh);
+}
+
+
+# generate makefile for ghdl toolchain
+sub gen_nvc_makefile
+{
+  my ($lib, $module) = @_;
+
+  my $fh = new FileHandle;
+  open($fh, ">$module" . "_nvc.mk") or die "could not create makefile for $module\n";
+
+  my $MOD_LIB    = uc($module) . "_LIB";
+  my $MOD        = uc($module) . "_MOD";
+  my $COM_FLAGS  = uc($module) . "_COMFLAGS";
+  my $ELAB_FLAGS = uc($module) . "_ELABFLAGS"; 
+
+  my $timestamp = localtime();
+  my $user      = $ENV{'USER'};
+  my $host      = $ENV{'HOSTNAME'};
+
+  print $fh "# automatic generated ghdl makefile do not edit manually\n";
+  #print $fh "# $timestamp by $user\@$host for architecture $GLOBAL::OSTYPE\n\n";
+  
+  print $fh "# library and module name\n";
+  print $fh "$MOD_LIB = $lib\n";
+  print $fh "$MOD = $module\n\n";
+
+  print $fh "# compiler and flags\n";
+  print $fh "CC = nvc\n";
+  print $fh "COMP = -a\n";
+  print $fh "ELAB = -e\n";
+
+  # read compile flags from config file
+  my $ref_flags = read_cfg($ENV{'GIT_PROJECTS'} . "/nvc.ini");
+
+  # extract compile flags from database
+  my $add_comp_flags = "";
+  foreach my $line (@{$$ref_flags{'compile_flags'}})
+  {
+    # sort out library mapping belonging to the library we just deal with
+    if(!($line =~ /(--map=)($module)(:)(\${DEST_PROJECTS}\/)($module)(\/nvc)/)) {
+      $add_comp_flags = $add_comp_flags . " $line";
+    }
+  }
+
+  # extract elaborate flags from database
+  my $add_elab_flags = "";
+  foreach my $line (@{$$ref_flags{'elaborate_flags'}})
+  {
+    # sort out library mapping belonging to the library we just deal with
+    if(!($line =~ /(--map=)($module)(:)(\${DEST_PROJECTS}\/)($module)(\/nvc)/)) {
+      $add_elab_flags = $add_elab_flags . " $line";
+    }
+  }
+
+  # generate ghdl compile flags
+  my $compile_flags = "--work=\${DEST_PROJECTS}/\${$MOD_LIB}/nvc $add_comp_flags";
+  my $elab_flags    = "--work=\${DEST_PROJECTS}/\${$MOD_LIB}/nvc $add_elab_flags";
+
+  print $fh "$COM_FLAGS = $compile_flags\n";
+  print $fh "$ELAB_FLAGS = $elab_flags\n";
+
+  # generate entry point
+  print $fh "\n# to have an entry point\n";
+  print $fh "all:";
+  foreach my $file (keys(%database))
+  {
+    my ($base, $path, $suffix) = fileparse($file, ".vhd");
+    my $prefix = "\${DEST_PROJECTS}/\${$MOD_LIB}/nvc/";
+    my $dep    = $prefix . $base . ".o";
+
+    print $fh " $dep";
+
+    if(${$$opt{'elab'}{'ref'}} == 1)
+    {
+      # in case of a testbench add executable as dependency
+      if(($base =~ /^tb_/) or ($base =~ /_tb$/))
+      {
+        my $dep = $prefix . $base . ".sh";
+        print $fh " $dep";
+      }
+    }
+  }
+  print $fh "\n";
+
+  if(${$$opt{'elab'}{'ref'}} == 1)
+  {
+    # generate targets to elaborate entities
+    my $elaborate_cmd   = "\$(CC) \$($ELAB_FLAGS) \$(ELAB)";
+    print $fh "\n# targets to elaborate entities\n";
+    foreach my $file (keys(%database))
+    {
+      my ($base, $path, $suffix) = fileparse($file, ".vhd");
+
+      # only "testbench entities" will be elaborated 
+      if(($base =~ /^tb_/) or ($base =~ /_tb$/))
+      {
+        my $prefix     = "\${DEST_PROJECTS}/\${$MOD_LIB}/nvc/";
+        my $target     = $prefix . $base . ".sh";
+        my $dep        = $prefix . $base . ".o";
+
+        print $fh "$target: $dep\n" .
+                  "\t\@echo \"elaborate entity...\" $base\n" .
+                  "\t\@$elaborate_cmd $base\n" .
+                  "\t\@echo \"nvc --work=$prefix -r $base\" > $target\n" .
+                  "\t\@chmod +x $target\n\n";
+      }
+    }
+  }
+
+  # generate targets to analyze files
+  my $analyze_cmd   = "\$(CC) \$($COM_FLAGS) \$(COMP) \$<";
+  print $fh "# targets to analyze files\n";
+  foreach my $file (keys(%database))
+  {
+    my ($base, $path, $suffix) = fileparse($file, ".vhd");
+    
+    my $src_prefix = substr($path, rindex($path, $lib), length($path));
+    my $prefix     = "\${DEST_PROJECTS}/\${$MOD_LIB}/nvc/";
+    my $target     = $prefix . $base . ".o";
+    my $dep        = "\${GIT_PROJECTS}/vhdl/" . $src_prefix . $base . $suffix;
+
+    print $fh "$target: $dep\n" .
+              "\t\@echo \"compile file.......\" \$<\n" .
+              "\t\@$analyze_cmd\n\t\@touch $target\n\n";
+  }
+
+  # generate file dependencies
+  print $fh "# file dependencies\n";
+  foreach my $file (keys(%database))
+  {
+    my ($base, $path, $suffix) = fileparse($file, ".vhd");
+    my $prefix = "\${DEST_PROJECTS}/\${$MOD_LIB}/nvc/";
+    my $target = $prefix . $base . ".o";
+
+    print $fh "$target:";
+    
+    foreach my $ref (@{$database{$file}})
+    {
+      my $dep_lib  = $$ref[0]; #$ref->[0]
+      my $dep_file = $$ref[1]; #$ref->[1]
+
+      my ($base, $path, $suffix) = fileparse($dep_file, ".vhd");
+      my $prefix = "\${DEST_PROJECTS}/$dep_lib/nvc/";
       my $dep    = $prefix . $base . ".o";
 
       print $fh " $dep";
