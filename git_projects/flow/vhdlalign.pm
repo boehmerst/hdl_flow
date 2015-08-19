@@ -38,6 +38,7 @@ sub align_file
     $line =~ s/ is / is \n/ig;             #Append a \n to line after is
     $line =~ s/ block / block \n/ig;       #Append a \n to line before use
     $line =~ s/ generate / generate \n/ig; #Append a \n after generate
+    $line =~ s/ begin / begin \n/ig;       #Append a \n after begin
 
     # cocanate the individual parts
     $string = $string . $line;
