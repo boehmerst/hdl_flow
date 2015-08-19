@@ -290,7 +290,8 @@ sub genNvcFiles
       foreach my $lib (@$libraries)
       {
         # add library to the ghdl.ini
-        print $ghdl "--map=$lib\:\${DEST_PROJECTS}/$lib/nvc\n";
+        #print $ghdl "--map=$lib\:\${DEST_PROJECTS}/$lib/nvc/$lib\n";
+        print $ghdl "-L \${DEST_PROJECTS}/$lib/nvc\n";
       }
     }
   }

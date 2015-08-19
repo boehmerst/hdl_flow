@@ -154,7 +154,8 @@ sub gen_database
       # end search for components
 
       # begin search for instances
-      if($$refline =~ / : / && !($$refline =~ /;/))
+      #if($$refline =~ / : / && !($$refline =~ /;/))
+      if($$refline =~ / : /)
       {
         if(($$refline =~ /entity/)) # an entity instantiation
         {
@@ -1109,9 +1110,9 @@ sub gen_nvc_makefile
   foreach my $line (@{$$ref_flags{'compile_flags'}})
   {
     # sort out library mapping belonging to the library we just deal with
-    if(!($line =~ /(--map=)($module)(:)(\${DEST_PROJECTS}\/)($module)(\/nvc)/)) {
+    #if(!($line =~ /(--map=)($module)(:)(\${DEST_PROJECTS}\/)($module)(\/nvc)/)) {
       $add_comp_flags = $add_comp_flags . " $line";
-    }
+    #}
   }
 
   # extract elaborate flags from database
@@ -1119,14 +1120,14 @@ sub gen_nvc_makefile
   foreach my $line (@{$$ref_flags{'elaborate_flags'}})
   {
     # sort out library mapping belonging to the library we just deal with
-    if(!($line =~ /(--map=)($module)(:)(\${DEST_PROJECTS}\/)($module)(\/nvc)/)) {
+    #if(!($line =~ /(--map=)($module)(:)(\${DEST_PROJECTS}\/)($module)(\/nvc)/)) {
       $add_elab_flags = $add_elab_flags . " $line";
-    }
+    #}
   }
 
   # generate ghdl compile flags
-  my $compile_flags = "--work=\${DEST_PROJECTS}/\${$MOD_LIB}/nvc $add_comp_flags";
-  my $elab_flags    = "--work=\${DEST_PROJECTS}/\${$MOD_LIB}/nvc $add_elab_flags";
+  my $compile_flags = "--work=\${$MOD_LIB}\:\${DEST_PROJECTS}/\${$MOD_LIB}/nvc/\${$MOD_LIB} $add_comp_flags";
+  my $elab_flags    = "--work=\${$MOD_LIB}\:\${DEST_PROJECTS}/\${$MOD_LIB}/nvc/\${$MOD_LIB} $add_elab_flags";
 
   print $fh "$COM_FLAGS = $compile_flags\n";
   print $fh "$ELAB_FLAGS = $elab_flags\n";
