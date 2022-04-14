@@ -1,3 +1,4 @@
+```
 hdl_flow
 A collection of perl scripts to compile VHDL sources
 
@@ -49,3 +50,4 @@ hdl_flow
  |  |--blacklist
  |--makefile
  |--modelsim.ini
+```
