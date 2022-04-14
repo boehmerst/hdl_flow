@@ -1,0 +1,470 @@
+#!/usr/bin/perl
+use Getopt::Long;
+use File::Basename;
+use File::Path;
+use File::Copy;
+use FileHandle;
+use Cwd;
+
+BEGIN
+{
+  $ROOT = $ENV{'GIT_PROJECTS'};
+  push(@INC, "$ROOT/flow");
+}
+
+use misc;
+use gen_lib;
+use gen_makefile;
+use strict;
+
+#my $osfh = new FileHandle;
+#open($osfh, "echo \$OSTYPE|");
+#my $line = <$osfh>;
+my $line = $ENV{"OSTYPE"};
+$GLOBAL::OSTYPE = $line;
+
+# enter the directory containing the library src
+my $ROOT = $ENV{'GIT_PROJECTS'};
+chdir("$ROOT/vhdl");
+
+my $toolchain = "ghdl";
+my @cmd_line_libs;
+
+# command line options table
+my %option = 
+  ( 'toolchain'    => { 'string' => 'toolchain|tc=s', 'ref' => \&chk_toolchain,     'help' => 'Specify the toolchain (ghdl, ncsim, modelsim, isim)' },
+    'verbose'      => { 'string' => 'verbose|v+',     'ref' => \$GLOBAL::verbosity, 'help' => '-v [-v] [-v] to increase verbosity'                  },
+    'make'         => { 'string' => 'make|m',         'ref' => \&make,              'help' => 'Execute "make" to compile library'                   },
+    'clean'        => { 'string' => 'clean|cl',       'ref' => \&make,              'help' => 'Execute "make clean" to clean library'               },
+    'quiet'        => { 'string' => 'quiet|q',        'ref' => \&quiet,             'help' => 'Tell the tool not to be talkative'                   },
+    'help'         => { 'string' => 'help|?',         'ref' => \&help,              'help' => 'Show help'                                           },
+    'version'      => { 'string' => 'version|ver',    'ref' => \&version,           'help' => 'Show current version'                                },
+    'compile'      => { 'string' => 'compile|c',      'ref' => newref(),            'help' => 'Generate makefile but do not execute it'             },
+    'preprocess'   => { 'string' => 'preprocess|p',   'ref' => \&preprocess,        'help' => 'Execute the proprocessing step only'                 },
+    'distclean'    => { 'string' => 'distclean|d',    'ref' => \&distclean,         'help' => 'Clean the entire distribution'                       },
+    'break-naming' => { 'string' => 'break-naming|b', 'ref' => newref(),            'help' => 'Allow files to break naming convention'              },
+    'sep-arch'     => { 'string' => 'sep-arch|sa',    'ref' => newref(),            'help' => 'Allow entity and architectures in different files'   },
+    'sep-body'     => { 'string' => 'sep-body|sb',    'ref' => newref(),            'help' => 'Allow package and package body in different files'   },
+    'lib'          => { 'string' => 'lib|l=s',        'ref' => \@cmd_line_libs,     'help' => 'Specify the library to be processed'                 },
+    'elab'         => { 'string' => 'elab|e',         'ref' => newref(),            'help' => 'support automatic elaboration of testbenches'        },
+  );
+
+# handle command line options
+GetOptions( $option{'toolchain'}    {'string'} => $option{'toolchain'}    {'ref'},
+            $option{'verbose'}      {'string'} => $option{'verbose'}      {'ref'},
+            $option{'make'}         {'string'} => $option{'make'}         {'ref'},
+            $option{'clean'}        {'string'} => $option{'clean'}        {'ref'},
+            $option{'quiet'}        {'string'} => $option{'quiet'}        {'ref'},
+            $option{'help'}         {'string'} => $option{'help'}         {'ref'},
+            $option{'version'}      {'string'} => $option{'version'}      {'ref'},
+            $option{'compile'}      {'string'} => $option{'compile'}      {'ref'},
+            $option{'preprocess'}   {'string'} => $option{'preprocess'}   {'ref'},
+            $option{'distclean'}    {'string'} => $option{'distclean'}    {'ref'},
+            $option{'break-naming'} {'string'} => $option{'break-naming'} {'ref'},
+            $option{'sep-arch'}     {'string'} => $option{'sep-arch'}     {'ref'},
+            $option{'sep-body'}     {'string'} => $option{'sep-body'}     {'ref'},
+            $option{'lib'}          {'string'} => $option{'lib'}          {'ref'},
+            $option{'elab'}         {'string'} => $option{'elab'}         {'ref'},
+          ) or die;
+
+# just tell what's going on
+print("*********************************************************************\n");
+print("** generate makefile for toolchain $toolchain\n");
+print("*********************************************************************\n");
+
+# configure the makefile generator
+set_makefile_options(\%option);
+
+# export to external modules (to be removed with $$option{'toolchain'}{'ref'} )
+$GLOBAL::toolchain = $toolchain;
+
+# envoke propocessing step
+my @libraries;
+_preprocess_(\@libraries);
+
+# generate makefile
+genMakefile(\@libraries, $toolchain);
+
+# execute makefile
+system("cd \$GIT_PROJECTS; make 2>&1 | \$GIT_PROJECTS/flow/colorize.pm") if(${$option{'compile'}{'ref'}} == 0);
+print "done!\n";
+
+1;
+
+###############################################################################
+### subroutines definition
+###############################################################################
+
+# check if toolchain is supported
+sub chk_toolchain
+{
+  my $option = $_[0];
+  $toolchain = lc($_[1]);
+
+  my %supported = ( 'ghdl'     => '1',
+                    'ncsim'    => '1',
+                    'modelsim' => '1',
+                    'isim'     => '1',
+                  );
+
+  if( ($supported{$toolchain} == 0) or !defined($supported{$toolchain}) )
+  {
+    die "toolchain $toolchain not supported\n";
+  }
+}
+
+# help
+sub help
+{
+  my $max_length = 0;
+
+  print "usage: compile [OPTION]\n\n";
+
+  # find maximum string length
+  foreach my $cmd (keys(%option))
+  {
+    my @alias  = split(/[\|,=]/, $option{$cmd}{'string'});
+    my $string = "--" . $alias[0] . ", -" . $alias[1] . ",";
+    $max_length = length($string) if length($string) > $max_length;
+  }
+
+  # print out aligned
+  foreach my $cmd (sort(keys(%option)))
+  {
+    my @alias  = split(/[\|,=,+]/, $option{$cmd}{'string'});
+    my $string = "--" . $alias[0] . ", -" . $alias[1] . ",";
+    my $length = length($string);
+    my $space  = ' 'x($max_length - $length);
+
+    print "$string $space $option{$cmd}{'help'}\n";
+  }
+
+  exit 1;
+}
+
+# "disable" stdout
+sub quiet
+{
+  open STDOUT, '>', "/dev/null" or die "Can't redirect STDOUT: $!";
+}
+
+# just to get an anonymous referenz for further usage
+sub newref
+{
+  my $ref;
+  return \$ref;
+}
+
+# show version
+sub version
+{
+  my $string = "compile V.0.3 written by Stephan Böhmer";
+  print "$string\n";
+  exit 1;
+}
+
+# execute makefile
+sub make
+{
+  my $cmd = $_[0];
+  die if(($cmd ne "make") and ($cmd ne "clean"));
+  my $target = "clean" if $cmd eq "clean";
+
+  system("cd \$GIT_PROJECTS; make $target 2>&1 | \$GIT_PROJECTS/flow/colorize.pm");
+  exit 1;
+}
+
+# get a list of all libraries based on the directory names
+%GLOBAL::blacklist;
+
+sub getLibFromDir
+{
+  my $libraries = $_[0];
+
+  # read libraries to be ignored from the blacklist
+  my $blname = "blacklist";
+
+  if(-e $blname)
+  {
+    my $fh = new FileHandle;
+    open($fh, "blacklist") or die "could not open blacklist";
+    my $lines = [<$fh>];
+    close($fh);
+
+    foreach my $lib (@$lines)
+    {
+      chomp($lib);
+      $lib =~ s/#.*//g;            # remove comments
+      next if( !($lib =~ /\S/) );  # skip empty lines
+
+      $lib =~ s/ //g;              # remove white space
+      $GLOBAL::blacklist{$lib} = "hello";
+    }
+  }
+
+  # open current directory
+  opendir(DIR, "./") or die "could not open directory\n";
+
+  while(my $element = readdir(DIR))
+  {
+    if((-d $element) && ($element ne ".") && ($element ne ".."))
+    {
+      if(!defined($GLOBAL::blacklist{$element}))
+      {         
+        # add to library database
+        push(@$libraries, $element);
+      }
+      else
+      {
+        vprint("ignore vhdl library $element due to blacklist entry\n");
+      }
+    }
+  }
+
+  close(DIR);
+}
+
+# generate directory structure
+sub genDirStruct
+{
+  my $libraries = $_[0];
+
+  # create directory structure
+  foreach my $lib (@$libraries)
+  {
+    my $dir = $ENV{'DEST_PROJECTS'} . "/" . $lib . "/$toolchain";
+    mkpath($dir);
+  }
+}
+
+# generate ghdl.ini
+sub genGhdlFiles
+{
+  my $libraries = $_[0];
+
+  my $dflt_ghdl_ini = new FileHandle;
+  open($dflt_ghdl_ini, "$ROOT/flow/dflt_ghdl.ini");
+  my $lines = [<$dflt_ghdl_ini>];
+  close(dflt_ghdl_ini);
+
+  my $ghdl      = new FileHandle;
+  open($ghdl, ">$ROOT/ghdl.ini") or die "could not create ghdl.ini";
+
+  foreach my $line (@{$lines})
+  {
+    chomp($line);
+    print $ghdl "$line\n";
+    if($line =~ /\[compile_flags\]/i or $line =~ /\[elaborate_flags\]/i)
+    {
+      foreach my $lib (@$libraries)
+      {
+        # add library to the ghdl.ini
+        print $ghdl "-P\${DEST_PROJECTS}/$lib/ghdl\n";  
+      }
+    }
+  }
+
+  close($ghdl);
+}
+
+# generate cds.lib and hdl.var needed by ncsim
+sub genNcsimFiles
+{
+  my $libraries = $_[0];
+  my $hdl_var   = new FileHandle;
+  my $cds       = new FileHandle;
+  
+  # copy default files for ncsim chain
+  copy("../flow/dflt_cds.lib", "../cds.lib") or die "could not copy cds.lib";
+  copy("../flow/dflt_hdl.var", "../hdl.var") or die "could not copy hdl.var";
+
+  open($hdl_var, ">>../hdl.var") or die "could not create hdl.var\n";
+  # add additional hdl.var contend here
+  close($hdl_var);
+
+  open($cds, ">>../cds.lib") or die "could not create cds.lib\n";
+  foreach my $lib (@$libraries)
+  {
+    # add library to the cds.lib
+    print $cds "DEFINE $lib \${DEST_PROJECTS}/$lib/ncsim\n";  
+  }
+
+  close($cds);
+}
+
+# generate modelsim.ini needed by modelsim
+sub genModelsimFiles
+{
+  my $library      = $_[0];
+
+  my $dflt_modelsim_ini = new FileHandle;
+  open($dflt_modelsim_ini, "$ROOT/flow/dflt_modelsim.ini")
+    or die "could not open default modelsim.ini";
+
+  my $lines = [<$dflt_modelsim_ini>];
+  close($dflt_modelsim_ini);
+
+  my $modelsim_ini = new FileHandle;
+  open($modelsim_ini, ">$ROOT/modelsim.ini") or die "could not create modelsim.ini";
+
+  # parse the default modelsim.ini and insert our libraries
+  foreach my $line (@{$lines})
+  {
+    print $modelsim_ini "$line";
+
+    if($line =~ /\[LIBRARY\]/ig)
+    {
+      foreach my $lib (@$library)
+      {
+        # add library to modelsim.ini
+        print $modelsim_ini "$lib = \${DEST_PROJECTS}/$lib/modelsim/lib\n";
+        my $dir = $ENV{'DEST_PROJECTS'} . "/" . $lib;
+        my $mslib = $dir . "/$toolchain/lib";       
+        system("vlib $mslib 2>&1 | \$GIT_PROJECTS/flow/colorize.pm") if(!( -e $mslib));
+      }
+    }
+  }
+
+  close($modelsim_ini);
+}
+
+# generate isim.ini and insert our libraries
+sub genIsimFiles
+{
+  my $libraries = $_[0];
+
+  my $dflt_isim_ini = new FileHandle;
+  open($dflt_isim_ini, "$ROOT/flow/dflt_isim.ini");
+  my $lines = [<$dflt_isim_ini>];
+  close(dflt_isim_ini);
+
+  my $isim      = new FileHandle;
+  open($isim, ">$ROOT/isim.ini") or die "could not create isim.ini";
+
+  foreach my $line (@{$lines})
+  {
+    chomp($line);
+    print $isim "$line\n";
+    if($line =~ /\[compile_flags\]/i or $line =~ /\[elaborate_flags\]/i)
+    {
+      foreach my $lib (@$libraries)
+      {
+        # add library to the isim.ini
+        print $isim "-L $lib=\${DEST_PROJECTS}/$lib/isim\n";
+      }
+    }
+  }
+
+  close($isim);
+}
+
+# generate the makefile
+sub genMakefile
+{
+  my $libraries = $_[0];
+  my $toolchain = $_[1];
+
+  # generate sub-makefiles for all libraries
+  my @sub_makefiles;
+  foreach my $lib (@$libraries)
+  {
+    # generate library / sub-makefile
+    gen_lib($lib, \@sub_makefiles);
+    vprint("\n");
+  }
+
+  # combine submakefiles to a master makefile
+  my $fh = new FileHandle;
+  open($fh, ">$ROOT/makefile") or die "could not create makefile\n";
+
+  # add header
+  my $timestamp = localtime();
+  my $user      = $ENV{'USER'};
+  my $host      = $ENV{'HOSTNAME'};
+
+  print $fh "# automatic generated ghdl makefile do not edit manually\n";
+  print $fh "# $timestamp by $user\@$host for architecture $GLOBAL::OSTYPE\n\n";
+
+  # create variable to contain library names
+  print $fh "# Libraries\n";
+  print $fh "libraries = ";
+  foreach my $lib (@$libraries)
+  {
+    print $fh "$lib,";
+  }
+  print $fh "\n\n";
+
+  foreach my $path (@sub_makefiles)
+  {
+    my $makefile = $path . "_" . $toolchain . ".mk";
+    print $fh "include $makefile\n";
+  }
+
+  # add the clean target to the makefile
+  print $fh "\nclean:\n\t\@echo \"clean library compilations\"\n\t\@rm -rf \${DEST_PROJECTS}/*/$toolchain\n\t\@compile --toolchain=$toolchain --lib \${libraries} --preprocess\n\n";
+
+  close($fh);
+}
+
+
+# wrapper to execure preprocessing step only
+sub preprocess
+{
+  my @libraries;
+  _preprocess_(\@libraries);
+  exit;
+}
+
+
+# execute preprocessing step
+sub _preprocess_
+{
+  my $libraries = $_[0];
+  vprint("execute preprocessing step for $toolchain\n");
+
+  # extract all libraries based on directory names or command line option
+  #if(defined(@{$option{'lib'}{'ref'}}))
+  if(@{$option{'lib'}{'ref'}})
+  {
+    @$libraries = split(/,/, join(',', @{$option{'lib'}{'ref'}}));
+  }
+  else
+  {
+    getLibFromDir($libraries);
+  }
+
+  # generate directory structure
+  genDirStruct($libraries);
+
+  # handle ghdl specific stuff
+  genGhdlFiles($libraries) if $toolchain eq "ghdl";
+
+  # handle ncsim specific stuff
+  genNcsimFiles($libraries) if $toolchain eq "ncsim";
+
+  # handle modelsim specific stuff
+  genModelsimFiles($libraries) if $toolchain eq "modelsim";
+
+  # handle isim specific stuff
+  genIsimFiles($libraries) if $toolchain eq "isim";
+}
+
+
+# clean entire distribution
+sub distclean
+{
+  print "Clean distribution\n";
+  rmtree("$ENV{'DEST_PROJECTS'}");
+  unlink("$ROOT/modelsim.ini");
+  unlink("$ROOT/makefile");
+  unlink("$ROOT/ghdl.ini");
+  unlink("$ROOT/hdl.var");
+  unlink("$ROOT/cds.lib");
+  unlink("$ROOT/isim.ini");
+  unlink("$ROOT/isim.log");
+  unlink("$ROOT/isim.wdb");
+  rmtree("$ROOT/isim");
+
+  exit;
+}
+

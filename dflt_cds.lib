@@ -1,0 +1,19 @@
+-- begin default cds.lib
+SOFTINCLUDE /projects/Allegro_B1/common/cds.lib
+UNDEFINE zmsc771sub
+UNDEFINE microwave
+UNDEFINE rfLib
+UNDEFINE scdsLib
+DEFINE avTech /apps/ASSURA32/5141/03.20.014/tools/assura/etc/avtech/avTech
+
+-- VHDL(auskommentieren wenn AMS)
+ SOFTINCLUDE $(inst_root_with:tools/bin/ncsim)/tools/inca/files/cds.lib
+-- AMS (auskommentieren wenn VHDL)
+-- SOFTINCLUDE /apps/IUS82/08.20.021/tools.lnx86/inca/files/IEEE_vhdlams/cds.lib
+
+UNDEFINE zmsc771sub
+UNDEFINE microwave
+UNDEFINE rfLib
+UNDEFINE scdsLib
+-- end default cds.lib
+
