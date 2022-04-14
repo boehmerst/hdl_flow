@@ -49,4 +49,3 @@ hdl_flow
  |  |--blacklist
  |--makefile
  |--modelsim.ini
-
