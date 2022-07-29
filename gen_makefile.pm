@@ -33,7 +33,7 @@ sub gen_makefile
   # just because %database is global
   local(%database);
 
-  vprint("$lib> greate makefile for module $module\n");
+  vprint("$lib> create makefile for module $module\n");
   gen_database($lib, $module, $reffilebase);
 
   # issue a warning if run under windows
@@ -619,7 +619,7 @@ sub gen_ghdl_makefile
                   "\t\@echo \"elaborate entity...\" $base\n" .
                   "\t\@$elaborate_cmd $base\n" .
 		  #NOTE: this is a hacky way to get a $1 for additional command line arguments into the shell script
-		  "\t\@echo -n \"#/bin/bash\\n\\nghdl -r $elab_flags \" >> $target.sh\n" .
+		  "\t\@echo -n \"#/bin/bash\\n\\nghdl -r $elab_flags \" > $target.sh\n" .
 		  "\t\@echo -n \"$base \" >> $target.sh\n" .
 		  "\t\@echo -n \'\$\$\' >> $target.sh\n" .
 		  "\t\@echo \"1\" >> $target.sh\n\n";
